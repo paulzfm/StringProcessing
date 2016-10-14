@@ -47,6 +47,8 @@ object Program {
   }
 
   class Bool(conjunctions: List[Conjunction]) {
+    def this(predicate: Predicate) = this(List(new Conjunction(predicate)))
+
     def eval(sigma: InputType): Boolean = {
       def evalR(xs: List[Conjunction]): Boolean = xs match {
         case Nil => false
@@ -62,6 +64,8 @@ object Program {
   }
 
   class Conjunction(predicates: List[Predicate]) {
+    def this(predicate: Predicate) = this(List(predicate))
+
     def eval(sigma: InputType): Boolean = {
       def evalR(xs: List[Predicate]): Boolean = xs match {
         case Nil => true
@@ -91,7 +95,7 @@ object Program {
     lazy val code = s"not Match($i, ${regex.code}, $k)"
   }
 
-  class TraceExpr(traces: List[AtomExpr]) extends ProgramNode {
+  class TraceExpr(traces: List[AtomExpr] = Nil) extends ProgramNode {
     def eval(sigma: InputType, w: Int = 0): Option[String] = {
       def concatenate(xs: List[Option[String]], acc: String): Option[String] = xs match {
         case Nil => Some(acc)
@@ -231,10 +235,8 @@ object Program {
     */
   type MatchPair = (Int, Int)
 
-  class RegularExpr(val tokens: List[Token]) {
+  class RegularExpr(val tokens: List[Token] = Nil) {
     def this(token: Token) = this(List(token))
-
-    def this() = this(Nil)
 
     def concat(that: RegularExpr): RegularExpr = new RegularExpr(tokens ++ that.tokens)
 
@@ -244,6 +246,7 @@ object Program {
 
     /**
       * To find all matches of string `s`.
+      *
       * @param s the string to be matched
       * @return a list of MatchPair showing all matches
       */
@@ -276,17 +279,17 @@ object Program {
       */
     def matchPrefixOf(s: String, from: Int): Option[Int] = {
       def helper(start: Int, tokens: List[Token]): Option[Int] = tokens match {
-          case Nil => Some(start - 1)
-          case EndToken :: Nil if start == s.length => Some(start - 1)
-          case t :: ts =>
-            if (start >= s.length) None
-            else {
-              t.matchPrefixOf(s, start) match {
-                case Some(end) => helper(end + 1, ts)
-                case None => None
-              }
+        case Nil => Some(start - 1)
+        case EndToken :: Nil if start == s.length => Some(start - 1)
+        case t :: ts =>
+          if (start >= s.length) None
+          else {
+            t.matchPrefixOf(s, start) match {
+              case Some(end) => helper(end + 1, ts)
+              case None => None
             }
-        }
+          }
+      }
       helper(from, tokens)
     }
 
