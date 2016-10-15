@@ -1,9 +1,13 @@
 import Program._
+import StringUtils._
 
-val l = new Learner(Vector((Vector("123-456"), "123")))
+val sigma = Vector((Vector("(6/7)(4/5)(14/1)"), "6/7# 4/5# 14/1# "))
 
-val s = "2003-23-03"
+val input = sigma(0)._1
+val output = sigma(0)._2
 
+val learner = new Learner(sigma)
 
-Pos(new RegularExpr(SpecialToken('-')), emptyRegex, CInt(2)).eval(s)
-Pos(new RegularExpr(EndToken), emptyRegex, CInt(1)).eval(s)
+val p = learner.genTraceExpr(input, output)
+
+p.check(output, input)

@@ -3,6 +3,7 @@
   */
 
 import StringUtils.StringUtilsClass
+import Utils._
 import Math.max
 
 object Program {
@@ -143,7 +144,7 @@ object Program {
     def eval(sigma: InputType, w: Int): Option[String] = Some(str)
 
     def code(indent: Int): String = {
-      indents(indent) + s"ConstStr('$str')"
+      indents(indent) + s"""ConstStr("$str")"""
     }
   }
 
@@ -184,26 +185,14 @@ object Program {
   }
 
   case class Pos(r1: RegularExpr, r2: RegularExpr, c: IntegerExpr) extends Position {
-    def eval(s: String, w: Int): Option[Int] = {
-      // i <> 0
-      def nth[T](xs: List[T], i: Int): Option[T] = {
-        // i > 0
-        def ith[U](xs: List[U], i: Int): Option[U] = xs match {
-          case Nil => None
-          case y :: ys => if (i == 1) Some(y) else ith(ys, i - 1)
-        }
+    def eval(s: String, w: Int): Option[Int] = nth(evalAll(s), c.eval(w))
 
-        if (i > 0) ith(xs, i)
-        else ith(xs.reverse, -i)
-      }
-
-      nth(
-        for {
-          (t1, t2) <- r1.findMatchesIn(s) // t1 <= t2 or t2 = t1 - 1
-          (t3, t4) <- r2.findMatchesIn(s) // t3 <= t4 or t4 = t3 - 1
-          if t2 + 1 == t3 // t = t3
-        } yield t3,
-        c.eval(w))
+    def evalAll(s: String): List[Int] = {
+      for {
+        (t1, t2) <- r1.findMatchesIn(s) // t1 <= t2 or t2 = t1 - 1
+        (t3, t4) <- r2.findMatchesIn(s) // t3 <= t4 or t4 = t3 - 1
+        if t2 + 1 == t3 // t = t3
+      } yield t3
     }
 
     lazy val code = s"Pos(${r1.code}, ${r2.code}, ${c.code})"
@@ -213,6 +202,8 @@ object Program {
     def eval(w: Int = 0): Int
 
     def code: String
+
+    override def toString: String = code
   }
 
   case class CInt(k: Int) extends IntegerExpr {
@@ -293,7 +284,10 @@ object Program {
       helper(from, tokens)
     }
 
-    override def toString: String = tokens.mkString("")
+    override def toString: String = {
+      if (tokens.isEmpty) "ε"
+      else tokens.mkString("")
+    }
 
     lazy val code = toString
   }
@@ -439,4 +433,3 @@ object Program {
     }
   }
 }
-

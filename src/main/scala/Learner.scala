@@ -59,7 +59,7 @@ class Learner(val examples: Vector[(Vector[String], String)]) {
   def generateBoolClassifier = ???
 
   def genTraceExpr(sigma: InputType, s: String): TraceExprSet = {
-    println(s"genTraceExpr($sigma, $s)")
+    //    println(s"genTraceExpr($sigma, $s)")
     val edges = for {
       i <- 0 until s.length
       j <- (i + 1) to s.length
@@ -72,11 +72,11 @@ class Learner(val examples: Vector[(Vector[String], String)]) {
     }.toMap
 
     new TraceExprSet((0 to s.length).toList, 0, s.length, edges.toList, w)
-    //    new TraceExprSet((0 to s.length).toList, 0, s.length, edges.toList, genLoop(sigma, s, w))
+    //        new TraceExprSet((0 to s.length).toList, 0, s.length, edges.toList, genLoop(sigma, s, w))
   }
 
   def genSubStr(sigma: InputType, s: String): List[AtomExprSet] = {
-    println(s"genSubStr($sigma, $s)")
+    //    println(s"genSubStr($sigma, $s)")
     val xs = for {
       i <- sigma.indices
       k <- sigma(i).indexesOf(s)
@@ -121,8 +121,6 @@ class Learner(val examples: Vector[(Vector[String], String)]) {
   )
 
   def genPos(s: String, k: Int): List[PosExprSet] = {
-    println(s"genPos($s, $k)")
-
     def findRegularExprMatchPrefixOf(s: String, tokens: List[Token]): List[(Int, RegularExpr)] = {
       val cache: MutableMap[Int, List[(Int, RegularExpr)]] = MutableMap()
       def ret(i: Int, r: List[(Int, RegularExpr)]): List[(Int, RegularExpr)] = {
@@ -133,16 +131,15 @@ class Learner(val examples: Vector[(Vector[String], String)]) {
       def matches(i: Int): List[(Int, RegularExpr)] = {
         cache.get(i) match {
           case Some(r) => r
-          case None => ???
-//            if (str.outOfRange(i)) ret(i, Nil)
-//            else
-//              ret(i, (for {
-//                token <- tokens
-//                j <- token.matchPrefixOf(str, i)
-//                index = i + j
-//              } yield (index, new RegularExpr(token)) :: matches(index + 1).map {
-//                case (index1, r) => (index1, r.prepend(token))
-//              }).flatten)
+          case None =>
+            if (i >= s.length) ret(i, Nil)
+            else
+              ret(i, (for {
+                token <- tokens
+                index <- token.matchPrefixOf(s, i)
+              } yield (index, new RegularExpr(token)) :: matches(index + 1).map {
+                case (index1, r) => (index1, r.prepend(token))
+              }).flatten)
         }
       }
       matches(0)
@@ -151,31 +148,27 @@ class Learner(val examples: Vector[(Vector[String], String)]) {
     def genTokenSeq(regex: RegularExpr, partition: TokenPartition): TokenSeq =
       new TokenSeq(regex.tokens.map(partition(_)._1))
 
-    val s1 = s.substring(0, k).reverse
-    val s2 = s.substring(k)
-    val ts1 = tokensPartitionOn(s1)
-    val ts2 = tokensPartitionOn(s2)
-
-    val rs1 = findRegularExprMatchPrefixOf(s1, ts1.keys.toList).map {
-      case (index, re) => (index, re.reverse)
+    val partition = tokensPartitionOn(s)
+    val tokens = partition.keys.toList
+    val rs1 = findRegularExprMatchPrefixOf(s.substring(0, k).reverse, tokens) map {
+      case (index, regex) => (k - 1 - index, regex.reverse)
+    } filter {
+      case (index, regex) => regex.findMatchesIn(s).contains((index, k - 1))
     }
-    val rs2 = findRegularExprMatchPrefixOf(s2, ts2.keys.toList)
-
-    println(s"ts1=${ts1.keys.toList}")
-    println(s"ts2=${ts2.keys.toList}")
-    println(s"rs1=$rs1")
-    println(s"rs2=$rs2")
+    val rs2 = findRegularExprMatchPrefixOf(s.substring(k), tokens) map {
+      case (index, regex) => (k + index, regex)
+    } filter {
+      case (index, regex) => regex.findMatchesIn(s).contains((k, index))
+    }
 
     for {
-      (a, r1) <- rs1
-      (b, r2) <- rs2
-    } yield {
-      val k1 = k - a - 1
-      val k2 = k + b
-      val ms = r1.concat(r2).findMatchesIn(s)
-      PosSet(genTokenSeq(r1, ts1), genTokenSeq(r2, ts2),
-        genIntegerExpr(ms.indexOf((k1, k2)), ms.size))
-    }
+      (k1, r1) <- rs1
+      (k2, r2) <- rs2
+      ms = Pos(r1, r2, CInt(0)).evalAll(s)
+      c = ms.indexOf(k)
+      if c != -1
+    } yield PosSet(genTokenSeq(r1, partition), genTokenSeq(r2, partition),
+      genIntegerExpr(1 + c, ms.size))
   }
 
   def genIntegerExpr(c: Int, c1: Int): IntegerExprSet = new IntegerExprSet(Set(
