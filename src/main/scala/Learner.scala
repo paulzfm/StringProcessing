@@ -2,6 +2,8 @@
   * Created by paul on 9/26/16.
   */
 
+import java.lang.Math.max
+
 import Program._
 import ProgramSet._
 import StringUtils.StringUtilsClass
@@ -15,13 +17,54 @@ class Learner(val examples: List[(Vector[String], String)]) {
     }
   }
 
-  type Partition = List[(InputType, TraceExprSet[Node])]
+  type Partition = Vector[(BaseNode[InputType], TraceExprSet)]
 
-  def genPartition(t: Partition): Partition = ???
+  def genPartition(partition: Partition): Partition = {
+    val comps = (for {
+      i <- 0 until (partition.size - 1)
+      j <- (i + 1) until partition.size
+      e = partition(i)._2.intersect(partition(j)._2)
+      if e.nonEmpty // Comp(i, j) = true, i < j
+    } yield ((i, j), e)).toMap
+
+    def comp(i: Int, j: Int): Boolean = comps.get((i, j)) match {
+      case Some(_) => true
+      case None => false
+    }
+
+    class Score(val cs1: Int, val cs2: Double) extends Ordered[Score] {
+      override def compare(that: Score): Int = {
+        val b = (cs1 > that.cs1) || (cs1 == that.cs1 && cs2 > that.cs2)
+        if (b) 1 else -1
+      }
+    }
+
+    val scores = comps map {
+      case ((i, j), e) =>
+        val cs1 = (for {
+          k <- partition.indices
+          if k != i && k != j
+          if comp(i, k) == comp(j, k) && comp(j, k) == e.intersect(partition(k)._2).nonEmpty
+        } yield 1).sum
+        val cs2 = e.size.toDouble / max(partition(i)._2.size, partition(j)._2.size)
+        ((i, j), new Score(cs1, cs2))
+    }
+
+    if (comps.isEmpty) partition
+    else {
+      val ((i, j), _) = scores.maxBy(_._2)
+      val e = comps((i, j))
+      val p = for {
+        k <- partition.indices
+        if k != i && k != j
+      } yield partition(k)
+      genPartition(p.toVector :+ (Pair(partition(i)._1, partition(j)._1), e))
+    }
+  }
 
   def generateBoolClassifier = ???
 
-  def genTraceExpr(sigma: InputType, s: String): TraceExprSet[Atom[Int]] = {
+  def genTraceExpr(sigma: InputType, s: String): TraceExprSet = {
     //    println(s"genTraceExpr($sigma, $s)")
     val edges = for {
       i <- 0 until s.length
@@ -34,7 +77,7 @@ class Learner(val examples: List[(Vector[String], String)]) {
           genConstStr(s.substring(i, j)) :: genSubStr(sigma, s.substring(i, j)))
     }.toMap
 
-    new TraceExprSet[Atom[Int]]((0 to s.length).map(Atom[Int]).toList, Atom(0), Atom(s.length),
+    new TraceExprSet((0 to s.length).map(Atom[Int]).toList, Atom(0), Atom(s.length),
       edges map {
         case (x, y) => (Atom(x), Atom(y))
       } toList, w.map {

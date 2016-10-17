@@ -19,3 +19,7 @@ val p2 = l.genTraceExpr(i2, o2)
 p2.check(Atom(o2), Atom(i2))
 val e = p1.intersect(p2)
 e.check(Pair(Atom(o1), Atom(o2)), Pair(Atom(i1), Atom(i2)))
+val x = l.genPartition(Vector(
+  (Atom(i1), p1),
+  (Atom(i2), p2)
+)).size

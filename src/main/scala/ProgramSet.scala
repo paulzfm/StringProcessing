@@ -8,6 +8,7 @@ import Utils._
 
 object ProgramSet {
 
+  // NOTE: SIDE EFFECT
   object ErrorLog {
     private var lastLog: String = ""
 
@@ -40,11 +41,19 @@ object ProgramSet {
   }
 
   type Node = BaseNode[Int]
+  type AtomNode = Atom[Int]
 
-  class TraceExprSet[T <: Node](val nodes: List[T], val startNode: T, val terminateNode: T,
-                                val edges: List[(T, T)], val w: Map[(T, T), List[AtomExprSet]]) {
-    def template[U <: Node](f: (AtomExprSet, AtomExprSet) => Option[AtomExprSet])
-                           (that: TraceExprSet[U]): TraceExprSet[Pair[Int]] = {
+  type PairNode = Pair[Int]
+
+  class TraceExprSet(val nodes: List[Node], val startNode: Node, val terminateNode: Node,
+                     val edges: List[(Node, Node)],
+                     val w: Map[(Node, Node), List[AtomExprSet]]) {
+    lazy val isEmpty: Boolean = w.forall(_._2.isEmpty)
+
+    lazy val nonEmpty: Boolean = !isEmpty
+
+    def template(f: (AtomExprSet, AtomExprSet) => Option[AtomExprSet])
+                (that: TraceExprSet): TraceExprSet = {
       val nodes1 = for {
         x <- nodes
         y <- that.nodes
@@ -57,32 +66,31 @@ object ProgramSet {
         (x1, x2) <- edges
         (y1, y2) <- that.edges
       } yield (
-        (Pair(x1, y1), Pair(x2, y2)),
+        (Pair(x1, y1): Node, Pair(x2, y2): Node),
         for {
           f1 <- w(x1, x2)
           f2 <- that.w(y1, y2)
           e <- f(f1, f2)
         } yield e)).toMap
 
-      new TraceExprSet[Pair[Int]](nodes1, Pair(startNode, that.startNode),
+      new TraceExprSet(nodes1, Pair(startNode, that.startNode),
         Pair(terminateNode, that.terminateNode), edges1, w1)
     }
 
-    def intersect[U <: Node]: TraceExprSet[U] => TraceExprSet[Pair[Int]] =
-      template[U](_.intersect(_))
+    def intersect: TraceExprSet => TraceExprSet = template(_.intersect(_))
 
-    def unify[U <: Node]: TraceExprSet[U] => TraceExprSet[Pair[Int]] =
-      template[U](_.unify(_))
+    def unify: TraceExprSet => TraceExprSet = template(_.unify(_))
 
     lazy val size: Int = {
-      //      def sz(i: Int): Int = {
-      //        if (i == startNode) 1
-      //        else (for {
-      //          j <- 0 until i
-      //        } yield sz(j) * w((j, i)).map(_.size).sum).sum
-      //      }
-      //      sz(terminateNode)
-      ???
+      def sz(n: Node): Int = {
+        if (n == startNode) 1
+        else (for {
+          m <- nodes
+          if m != n
+          f <- w.get((m, n))
+        } yield sz(m) * f.map(_.size).sum).sum
+      }
+      sz(terminateNode)
     }
 
     override def toString: String = {
@@ -126,6 +134,7 @@ object ProgramSet {
       }
     }
 
+    @deprecated(message = "Use `check` instead, which is more clear.")
     def check1(expected: BaseNode[String], sigma: BaseNode[InputType]): Boolean = {
       def dimensionError: Boolean = {
         val e = expected.toStringWith(_.length.toString)
@@ -170,9 +179,9 @@ object ProgramSet {
   abstract class AtomExprSet {
     def size: Int
 
-    def intersect[T <: Node]: AtomExprSet => Option[AtomExprSet]
+    def intersect: AtomExprSet => Option[AtomExprSet]
 
-    def unify[T <: Node]: AtomExprSet => Option[AtomExprSet]
+    def unify: AtomExprSet => Option[AtomExprSet]
 
     def eval(sigma: InputType): Set[String]
 
@@ -182,12 +191,12 @@ object ProgramSet {
   }
 
   case class ConstStrSet(s: String) extends AtomExprSet {
-    def intersect[T <: Node]: AtomExprSet => Option[AtomExprSet] = {
+    def intersect: AtomExprSet => Option[AtomExprSet] = {
       case ConstStrSet(s1) => if (s == s1) Some(this) else None
       case _ => None
     }
 
-    def unify[T <: Node] = intersect
+    def unify = intersect
 
     val size = 1
 
@@ -226,9 +235,9 @@ object ProgramSet {
       case _ => None
     }
 
-    def intersect[T <: Node]: AtomExprSet => Option[AtomExprSet] = template(_.intersect(_))
+    def intersect: AtomExprSet => Option[AtomExprSet] = template(_.intersect(_))
 
-    def unify[T <: Node]: AtomExprSet => Option[AtomExprSet] = template(_.unify(_))
+    def unify: AtomExprSet => Option[AtomExprSet] = template(_.unify(_))
 
     lazy val size = p.map(_.size).sum * q.map(_.size).sum
 
@@ -251,16 +260,16 @@ object ProgramSet {
     }
   }
 
-  case class LoopSet[T <: Node](e: TraceExprSet[T]) extends AtomExprSet {
-    def template[U <: Node](f: (TraceExprSet[T], TraceExprSet[U]) => TraceExprSet[Pair[Int]])
-                           (that: AtomExprSet): Option[AtomExprSet] = that match {
-      case LoopSet(e1: TraceExprSet[U]) => Some(LoopSet(f(e, e1)))
+  case class LoopSet(e: TraceExprSet) extends AtomExprSet {
+    def template(f: (TraceExprSet, TraceExprSet) => TraceExprSet)
+                (that: AtomExprSet): Option[AtomExprSet] = that match {
+      case LoopSet(e1) => Some(LoopSet(f(e, e1)))
       case _ => None
     }
 
-    def intersect[U <: Node]: AtomExprSet => Option[AtomExprSet] = template[U](_.intersect(_))
+    def intersect: AtomExprSet => Option[AtomExprSet] = template(_.intersect(_))
 
-    def unify[U <: Node]: AtomExprSet => Option[AtomExprSet] = template[U](_.unify(_))
+    def unify: AtomExprSet => Option[AtomExprSet] = template(_.unify(_))
 
     def eval(sigma: InputType): Set[String] = {
       //      (for {
