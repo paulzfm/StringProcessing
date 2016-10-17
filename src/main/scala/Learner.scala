@@ -5,60 +5,23 @@
 import Program._
 import ProgramSet._
 import StringUtils.StringUtilsClass
+
 import scala.collection.mutable.{Map => MutableMap}
 
-class Learner(val examples: Vector[(Vector[String], String)]) {
-  def generateStringProgram = {
-    ???
-  }
-
-  type Partition = Vector[(Vector[String], TraceExprSet)]
-
-  def generatePartition(t: Partition): Partition = {
-    class Score(val s1: Int, val s2: Double) {
-      def <(that: Score): Boolean = (s1 > that.s1) || (s1 == that.s1 && s2 > that.s2)
+class Learner(val examples: List[(Vector[String], String)]) {
+  def genStringProgram = {
+    examples.map {
+      case (i, o) => (i, genTraceExpr(i, o))
     }
-
-    def loop(t: Partition): Partition = ???
-    //      val sizes = for {
-    //        i <- t.indices
-    //      } yield size(t(i)._2)
-    //      val intersects = (for {
-    //        i <- 0 until (t.size - 1)
-    //        j <- (i + 1) until t.size
-    //      } yield ((i, j), intersect(t(i)._2, t(j)._2))).toMap
-    //      val comps = intersects.mapValues(x => true)
-    //
-    //      if (!comps.exists(_._2)) t
-    //      else {
-    //        val ((p, q), _) = (for {
-    //          i <- 0 until (t.size - 1)
-    //          j <- (i + 1) until t.size
-    //        } yield {
-    //          val cs1 = (for {
-    //            k <- t.indices
-    //            if k != i && k != j
-    //            if comps((i, k)) == comps((j, k)) &&
-    //              comps((j, k)) == compatible(intersects((i, j)), t(k)._2)
-    //          } yield 1).sum
-    //          val cs2 = size(intersects((i, j))) / max(sizes(i), sizes(j))
-    //          ((i, j), new Score(cs1, cs2))
-    //        }).maxBy(_._2)
-    //
-    //        val t1 = (for {
-    //          i <- t.indices
-    //          if i != p && i != q
-    //        } yield t(i)).toVector ++ Vector((t(p)._1 ++ t(q)._1, intersects((p, q))))
-    //        loop(t1)
-    //      }
-    //    }
-
-    loop(t)
   }
+
+  type Partition = List[(InputType, TraceExprSet[Node])]
+
+  def genPartition(t: Partition): Partition = ???
 
   def generateBoolClassifier = ???
 
-  def genTraceExpr(sigma: InputType, s: String): TraceExprSet = {
+  def genTraceExpr(sigma: InputType, s: String): TraceExprSet[Atom[Int]] = {
     //    println(s"genTraceExpr($sigma, $s)")
     val edges = for {
       i <- 0 until s.length
@@ -71,8 +34,13 @@ class Learner(val examples: Vector[(Vector[String], String)]) {
           genConstStr(s.substring(i, j)) :: genSubStr(sigma, s.substring(i, j)))
     }.toMap
 
-    new TraceExprSet((0 to s.length).toList, 0, s.length, edges.toList, w)
-    //        new TraceExprSet((0 to s.length).toList, 0, s.length, edges.toList, genLoop(sigma, s, w))
+    new TraceExprSet[Atom[Int]]((0 to s.length).map(Atom[Int]).toList, Atom(0), Atom(s.length),
+      edges map {
+        case (x, y) => (Atom(x), Atom(y))
+      } toList, w.map {
+        case ((x, y), e) => ((Atom(x), Atom(y)), e)
+      })
+    //    new TraceExprSet((0 to s.length).toList, 0, s.length, edges.toList, genLoop(sigma, s, w))
   }
 
   def genSubStr(sigma: InputType, s: String): List[AtomExprSet] = {
@@ -89,6 +57,8 @@ class Learner(val examples: Vector[(Vector[String], String)]) {
   }
 
   def genConstStr(s: String): AtomExprSet = ConstStrSet(s)
+
+  type Mapping = Map[(Int, Int), List[AtomExprSet]]
 
   def genLoop(sigma: Vector[String], s: String, w: Mapping): Mapping = {
     val loops = (for {
