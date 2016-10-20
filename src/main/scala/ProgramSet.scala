@@ -6,6 +6,9 @@ import Program._
 import StringUtils.StringUtilsClass
 import Utils._
 
+import scala.collection.mutable.{Map => MutableMap}
+
+
 object ProgramSet {
 
   // NOTE: SIDE EFFECT
@@ -17,6 +20,50 @@ object ProgramSet {
     def show: String = lastLog
 
     override def toString: String = lastLog
+  }
+
+  /**
+    * Find all permutations for Stream[ Stream[T] ] = { xs1, xs2, ... }
+    * i.e. for {
+    * x1 <- xs1
+    * x2 <- xs2
+    * ...
+    * } yield Stream(x1, x2, ...)
+    *
+    * @param xs
+    * @tparam T
+    * @return
+    */
+  def permutation[T](xs: List[Stream[T]]): Stream[List[T]] = xs match {
+    case List(x, y) => for {
+      x1 <- x
+      y1 <- y
+    } yield List(x1, y1)
+
+    case y :: ys => for {
+      x1 <- y
+      x2 <- permutation(ys)
+    } yield x1 :: x2
+  }
+
+  abstract class ProgramSetNode[T <: ProgramNode] {
+    def allPrograms: Stream[T]
+
+    def take(n: Int): List[T] = allPrograms.take(n).toList
+
+    def head: T = allPrograms.head
+  }
+
+  class StringProgramSet(val e: List[(Bool, TraceExprSet)] = Nil)
+    extends ProgramSetNode[StringProgram] {
+    lazy val allPrograms: Stream[StringProgram] = {
+      val bs = e.map(_._1)
+      permutation(e.map(_._2.allPrograms)).map(exprs => new StringProgram(bs.zip(exprs)))
+    }
+
+    override def toString: String = e map {
+      case (b, t) => s"Case $b => $t"
+    } mkString "\n"
   }
 
   // type BaseNode[T] := T | (BaseNode[T], BaseNode[T])
@@ -42,13 +89,13 @@ object ProgramSet {
 
   type Node = BaseNode[Int]
   type AtomNode = Atom[Int]
-
   type PairNode = Pair[Int]
 
   class TraceExprSet(val nodes: List[Node], val startNode: Node, val terminateNode: Node,
                      val edges: List[(Node, Node)],
-                     val w: Map[(Node, Node), List[AtomExprSet]]) {
-    lazy val isEmpty: Boolean = w.forall(_._2.isEmpty)
+                     val w: Map[(Node, Node), List[AtomExprSet]])
+    extends ProgramSetNode[TraceExpr] {
+    lazy val isEmpty: Boolean = size == 0
 
     lazy val nonEmpty: Boolean = !isEmpty
 
@@ -62,16 +109,19 @@ object ProgramSet {
         (x1, x2) <- edges
         (y1, y2) <- that.edges
       } yield (Pair(x1, y1), Pair(x2, y2))
+
       val w1 = (for {
         (x1, x2) <- edges
         (y1, y2) <- that.edges
-      } yield (
-        (Pair(x1, y1): Node, Pair(x2, y2): Node),
-        for {
+        es = for {
           f1 <- w(x1, x2)
           f2 <- that.w(y1, y2)
           e <- f(f1, f2)
-        } yield e)).toMap
+        } yield e
+        if es.nonEmpty
+      } yield (
+        (Pair(x1, y1): Node, Pair(x2, y2): Node),
+        es)).toMap
 
       new TraceExprSet(nodes1, Pair(startNode, that.startNode),
         Pair(terminateNode, that.terminateNode), edges1, w1)
@@ -81,14 +131,26 @@ object ProgramSet {
 
     def unify: TraceExprSet => TraceExprSet = template(_.unify(_))
 
-    lazy val size: Int = {
-      def sz(n: Node): Int = {
-        if (n == startNode) 1
-        else (for {
-          m <- nodes
-          if m != n
-          f <- w.get((m, n))
-        } yield sz(m) * f.map(_.size).sum).sum
+    lazy val size: Long = {
+      val cache1 = w.mapValues(_.map(_.size).sum)
+      val keys = w.keys
+
+      val cache: MutableMap[Node, Long] = MutableMap()
+      def ret(k: Node, v: Long): Long = {
+        cache(k) = v
+        v
+      }
+
+      def sz(n: Node): Long = cache.get(n) match {
+        case Some(v) => v
+        case None =>
+          if (n == startNode) ret(n, 1L)
+          else ret(n, (for {
+            m <- keys.flatMap {
+              case (i, j) if j == n => Some(i)
+              case _ => None
+            }
+          } yield sz(m) * cache1(m, n)).sum)
       }
       sz(terminateNode)
     }
@@ -174,10 +236,12 @@ object ProgramSet {
 
       checkDimension(terminateNode, expected) && helper(expected, sigma, w)
     }
+
+    lazy val allPrograms: Stream[TraceExpr] = ???
   }
 
-  abstract class AtomExprSet {
-    def size: Int
+  abstract class AtomExprSet extends ProgramSetNode[AtomExpr] {
+    def size: Long
 
     def intersect: AtomExprSet => Option[AtomExprSet]
 
@@ -198,7 +262,7 @@ object ProgramSet {
 
     def unify = intersect
 
-    val size = 1
+    val size = 1L
 
     def eval(sigma: InputType): Set[String] = Set(s)
 
@@ -211,6 +275,8 @@ object ProgramSet {
         false
       }
     }
+
+    lazy val allPrograms: Stream[AtomExpr] = Stream(ConstStr(s))
   }
 
   case class SubStrSet(i: Int, p: List[PosExprSet], q: List[PosExprSet]) extends AtomExprSet {
@@ -241,7 +307,7 @@ object ProgramSet {
 
     lazy val size = p.map(_.size).sum * q.map(_.size).sum
 
-    override def toString: String = s"SubStr($i, {${p.mkString(",")}}, {${q.mkString(",")}})"
+    override def toString: String = s"SubStr($i, {${p.mkString(", ")}}, {${q.mkString(", ")}})"
 
     def eval(sigma: InputType): Set[String] = {
       ???
@@ -258,6 +324,11 @@ object ProgramSet {
         false
       }
     }
+
+    lazy val allPrograms: Stream[AtomExpr] = for {
+      x <- p.toStream.flatMap(_.allPrograms)
+      y <- q.toStream.flatMap(_.allPrograms)
+    } yield SubStr(i, x, y)
   }
 
   case class LoopSet(e: TraceExprSet) extends AtomExprSet {
@@ -282,10 +353,14 @@ object ProgramSet {
     lazy val size = e.size
 
     def check(expected: String, sigma: InputType): Boolean = ???
+
+    lazy val allPrograms: Stream[AtomExpr] = for {
+      x <- e.allPrograms
+    } yield Loop(x)
   }
 
-  abstract class PosExprSet {
-    def size: Int
+  abstract class PosExprSet extends ProgramSetNode[Position] {
+    def size: Long
 
     def intersect: PosExprSet => Option[PosExprSet]
 
@@ -306,7 +381,7 @@ object ProgramSet {
 
     val unify = intersect
 
-    val size = 1
+    val size = 1L
 
     override def toString: String = s"CPos($k)"
 
@@ -318,6 +393,8 @@ object ProgramSet {
         false
       }
     }
+
+    lazy val allPrograms: Stream[Position] = Stream(CPos(k))
   }
 
   case class PosSet(r1: TokenSeq, r2: TokenSeq, c: IntegerExprSet) extends PosExprSet {
@@ -332,7 +409,7 @@ object ProgramSet {
 
     val unify = intersect
 
-    lazy val size = c.size
+    lazy val size = r1.size * r2.size * c.size
 
     override def toString: String = s"Pos($r1, $r2, $c)"
 
@@ -354,9 +431,15 @@ object ProgramSet {
         }
       }
     }
+
+    lazy val allPrograms: Stream[Position] = for {
+      x <- r1.allPrograms
+      y <- r2.allPrograms
+      k <- c.allPrograms
+    } yield Pos(x, y, k)
   }
 
-  class IntegerExprSet(val e: Set[IntegerExpr]) {
+  class IntegerExprSet(val e: Set[IntegerExpr]) extends ProgramSetNode[IntegerExpr] {
     def intersect(that: IntegerExprSet): Option[IntegerExprSet] = {
       val s = e.intersect(that.e)
       if (s.isEmpty) None else Some(new IntegerExprSet(s))
@@ -376,12 +459,14 @@ object ProgramSet {
       case _ => None
     }
 
-    lazy val size = e.size
+    lazy val size: Long = e.size
 
     override def toString: String = s"{${e.mkString(", ")}}"
+
+    lazy val allPrograms: Stream[IntegerExpr] = e.toStream
   }
 
-  class TokenSeq(val tokenss: List[List[Token]]) {
+  class TokenSeq(val tokenss: List[List[Token]]) extends ProgramSetNode[RegularExpr] {
     def intersect(that: TokenSeq): Option[TokenSeq] = {
       if (tokenss.size != that.tokenss.size) None
       else {
@@ -393,7 +478,9 @@ object ProgramSet {
       }
     }
 
-    lazy val repsRegularExpr: RegularExpr = new RegularExpr(tokenss.map(_.head))
+    lazy val size: Long = tokenss.map(_.size).product
+
+    lazy val repsRegularExpr: RegularExpr = allPrograms.head //new RegularExpr(tokenss.map(_.head))
 
     override def toString: String = {
       val s = tokenss map {
@@ -415,6 +502,10 @@ object ProgramSet {
       }
 
       tokenss.forall(indistinguishable)
+    }
+
+    lazy val allPrograms: Stream[RegularExpr] = permutation(tokenss.map(_.toStream)).map {
+      xs => new RegularExpr(xs)
     }
   }
 

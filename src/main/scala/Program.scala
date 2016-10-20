@@ -2,9 +2,10 @@
   * Created by paul on 9/29/16.
   */
 
+import java.lang.Math.max
+
 import StringUtils.StringUtilsClass
 import Utils._
-import Math.max
 
 object Program {
   def debug[T](x: T): T = {
@@ -16,13 +17,15 @@ object Program {
 
   def indents(indent: Int = 0): String = "  " * indent
 
-  abstract class ProgramNode {
+  trait ProgramTopNode {
     def eval(sigma: InputType, w: Int = 0): Option[String]
 
     def code(indent: Int = 0): String
   }
 
-  class StringProgram(switches: List[(Bool, TraceExpr)]) extends ProgramNode {
+  abstract class ProgramNode
+
+  class StringProgram(switches: List[(Bool, TraceExpr)]) extends ProgramNode with ProgramTopNode {
     def eval(sigma: InputType, w: Int): Option[String] = {
       def evalR(xs: List[(Bool, TraceExpr)]): Option[String] = xs match {
         case Nil => None
@@ -47,7 +50,7 @@ object Program {
     }
   }
 
-  class Bool(conjunctions: List[Conjunction]) {
+  class Bool(conjunctions: List[Conjunction] = Nil) {
     def this(predicate: Predicate) = this(List(new Conjunction(predicate)))
 
     def eval(sigma: InputType): Boolean = {
@@ -62,6 +65,8 @@ object Program {
       val blanks = indents(indent)
       conjunctions.map(blanks + "(" + _.code + ")").mkString(" or\n")
     }
+
+    override def toString: String = s"Or(${conjunctions.mkString(", ")})"
   }
 
   class Conjunction(predicates: List[Predicate]) {
@@ -76,27 +81,37 @@ object Program {
     }
 
     lazy val code = predicates.map(_.code).mkString(" and ")
+
+    override def toString: String = s"And(${predicates.mkString(", ")})"
   }
 
   abstract class Predicate {
     def eval(sigma: InputType): Boolean
 
     def code: String
+
+    override def toString: String = code
+
+    def negate: Predicate
   }
 
   case class Match(i: Int, regex: RegularExpr, k: Int = 1) extends Predicate {
     def eval(sigma: InputType): Boolean = regex.findMatchesIn(sigma(i)).length >= k
 
     lazy val code = s"Match($i, ${regex.code}, $k)"
+
+    lazy val negate = NotMatch(i, regex, k)
   }
 
   case class NotMatch(i: Int, regex: RegularExpr, k: Int = 1) extends Predicate {
     def eval(sigma: InputType): Boolean = regex.findMatchesIn(sigma(i)).length < k
 
     lazy val code = s"not Match($i, ${regex.code}, $k)"
+
+    lazy val negate = Match(i, regex, k)
   }
 
-  class TraceExpr(traces: List[AtomExpr] = Nil) extends ProgramNode {
+  class TraceExpr(traces: List[AtomExpr] = Nil) extends ProgramNode with ProgramTopNode {
     def eval(sigma: InputType, w: Int = 0): Option[String] = {
       def concatenate(xs: List[Option[String]], acc: String): Option[String] = xs match {
         case Nil => Some(acc)
@@ -118,7 +133,7 @@ object Program {
 
   val emptyString = new TraceExpr(Nil)
 
-  abstract class AtomExpr extends ProgramNode {
+  abstract class AtomExpr extends ProgramNode with ProgramTopNode {
     def eval(sigma: InputType, w: Int = 0): Option[String]
 
     def code(indent: Int = 0): String
@@ -169,7 +184,7 @@ object Program {
     }
   }
 
-  abstract class Position {
+  abstract class Position extends ProgramNode {
     def eval(s: String, w: Int = 0): Option[Int]
 
     def code: String
@@ -198,7 +213,7 @@ object Program {
     lazy val code = s"Pos(${r1.code}, ${r2.code}, ${c.code})"
   }
 
-  abstract class IntegerExpr {
+  abstract class IntegerExpr extends ProgramNode {
     def eval(w: Int = 0): Int
 
     def code: String
@@ -226,12 +241,14 @@ object Program {
     */
   type MatchPair = (Int, Int)
 
-  class RegularExpr(val tokens: List[Token] = Nil) {
+  class RegularExpr(val tokens: List[Token] = Nil) extends ProgramNode {
     def this(token: Token) = this(List(token))
 
     def concat(that: RegularExpr): RegularExpr = new RegularExpr(tokens ++ that.tokens)
 
     lazy val reverse = new RegularExpr(tokens.reverse)
+
+    lazy val size = tokens.size
 
     def prepend(token: Token): RegularExpr = new RegularExpr(token :: tokens)
 
@@ -429,7 +446,18 @@ object Program {
 
   def tokensPartitionOn(s: String): TokenPartition = {
     allTokens.groupBy(_.findMatchesIn(s)).map {
-      case (ms, ts) => (ts.head, (ts, ms))
+      case (ms, ts) =>
+        val sorted = ts.sortBy {
+          case SpecialToken(_) => 1
+          case OneOrMore(Whitespaces) => 2
+          case OneOrMore(Numeric) => 2
+          case OneOrMore(UpperCases) => 2
+          case OneOrMore(LowerCases) => 2
+          case OneOrMore(Letters) => 3
+          case OneOrMore(NumericWithLetters) => 4
+          case _ => 5
+        }
+        (sorted.head, (sorted, ms))
     }
   }
 }
