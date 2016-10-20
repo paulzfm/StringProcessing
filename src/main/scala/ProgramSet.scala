@@ -35,11 +35,12 @@ object ProgramSet {
     * @return
     */
   def permutation[T](xs: List[Stream[T]]): Stream[List[T]] = xs match {
-    case List(x, y) => for {
+    case Nil => Stream()
+    case x :: Nil => x.map(List(_))
+    case x :: y :: Nil => for {
       x1 <- x
       y1 <- y
     } yield List(x1, y1)
-
     case y :: ys => for {
       x1 <- y
       x2 <- permutation(ys)
@@ -237,7 +238,10 @@ object ProgramSet {
       checkDimension(terminateNode, expected) && helper(expected, sigma, w)
     }
 
-    lazy val allPrograms: Stream[TraceExpr] = ???
+    lazy val allPrograms: Stream[TraceExpr] = w(startNode, terminateNode).toStream
+      .flatMap(_.allPrograms).map {
+      e => new TraceExpr(e)
+    }
   }
 
   abstract class AtomExprSet extends ProgramSetNode[AtomExpr] {

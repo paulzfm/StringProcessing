@@ -112,6 +112,8 @@ object Program {
   }
 
   class TraceExpr(traces: List[AtomExpr] = Nil) extends ProgramNode with ProgramTopNode {
+    def this(e: AtomExpr) = this(List(e))
+
     def eval(sigma: InputType, w: Int = 0): Option[String] = {
       def concatenate(xs: List[Option[String]], acc: String): Option[String] = xs match {
         case Nil => Some(acc)
