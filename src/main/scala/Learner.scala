@@ -10,10 +10,13 @@ import StringUtils.StringUtilsClass
 
 import scala.collection.mutable.{Map => MutableMap}
 
-class Learner(val examples: List[(InputType, String)]) {
+class Learner(val examples: List[(InputType, String)], val check: Boolean = false) {
   private lazy val program: StringProgramSet = {
     val partition = genPartition(examples map {
-      case (i, o) => (List(i), genTraceExpr(i, o))
+      case (i, o) =>
+        val exprs = genTraceExpr(i, o)
+        if (check) exprs.check(Atom(o), Atom(i))
+        (List(i), exprs)
     } toVector)
 
     def exclude(k: Int): List[InputType] = (for {

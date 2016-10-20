@@ -419,8 +419,8 @@ object ProgramSet {
 
     def check(expected: Int, s: String): Boolean = {
       r1.check(s) && r2.check(s) && {
-        val reps1 = r1.repsRegularExpr
-        val reps2 = r2.repsRegularExpr
+        val reps1 = r1.head
+        val reps2 = r2.head
         c.e.forall { c1 =>
           val p = Pos(reps1, reps2, c1)
           p.eval(s) match {
@@ -483,8 +483,6 @@ object ProgramSet {
     }
 
     lazy val size: Long = tokenss.map(_.size).product
-
-    lazy val repsRegularExpr: RegularExpr = allPrograms.head //new RegularExpr(tokenss.map(_.head))
 
     override def toString: String = {
       val s = tokenss map {
