@@ -176,6 +176,16 @@ object Program {
       Some(evalR(1, ""))
     }
 
+    def evalS(sigma: InputType): List[String] = {
+      def evalR(k: Int, acc: List[String]): List[String] = {
+        expr.eval(sigma, k) match {
+          case Some(s) => evalR(k + 1, acc :+ s)
+          case None => acc
+        }
+      }
+      evalR(1, Nil)
+    }
+
     def code(indent: Int): String = {
       val blanks = indents(indent)
       List(
@@ -251,6 +261,10 @@ object Program {
     lazy val reverse = new RegularExpr(tokens.reverse)
 
     lazy val size = tokens.size
+
+    lazy val isEmpty = tokens.isEmpty
+
+    lazy val nonEmpty = !isEmpty
 
     def prepend(token: Token): RegularExpr = new RegularExpr(token :: tokens)
 

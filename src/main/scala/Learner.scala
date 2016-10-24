@@ -24,6 +24,8 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
       if i != k
     } yield partition(i)._1).flatten.toList
 
+    println(s"${partition.size} partitions")
+
     partition.size match {
       case 0 => new StringProgramSet
       case 1 => new StringProgramSet(List((new Bool, partition(0)._2)))
@@ -135,7 +137,7 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
   }
 
   def genTraceExpr(sigma: InputType, s: String): TraceExprSet = {
-    //    println(s"genTraceExpr($sigma, $s)")
+    println(s"genTraceExpr($sigma, $s)")
     val edges = for {
       i <- 0 until s.length
       j <- (i + 1) to s.length
@@ -157,7 +159,6 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
   }
 
   def genSubStr(sigma: InputType, s: String): List[AtomExprSet] = {
-    //    println(s"genSubStr($sigma, $s)")
     val xs = for {
       i <- sigma.indices
       k <- sigma(i).indexesOf(s)
@@ -171,32 +172,27 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
 
   def genConstStr(s: String): AtomExprSet = ConstStrSet(s)
 
-  type Mapping = Map[(Int, Int), List[AtomExprSet]]
+  /*
+  def genLoop(sigma: Vector[String], s: String, t: TraceExprSet): Map[(Node, Node), List[AtomExprSet]] = {
+    val w1 = MutableMap() ++ t.w
 
-  def genLoop(sigma: Vector[String], s: String, w: Mapping): Mapping = {
-    val loops = (for {
+    for {
       k1 <- 0 until s.length
       k2 <- k1 until s.length
-      k3 <- k2 until s.length
-      e1 = genTraceExpr(sigma, s.substring(k1, k2 + 1))
-      e2 = genTraceExpr(sigma, s.substring(k2, k3 + 1))
-      e = e1.unify(e2)
-      outputs = LoopSet(e).eval(sigma)
-      if outputs.size == 1 && s.indexesOf(outputs.head).contains(k1)
+      k3 <- 1 + k2 until s.length
+      e1 = t.subgraph(k1, k2 + 1)
+      e2 = t.subgraph(k2 + 1, k3 + 1)
+      e = LoopSet(e1.unify(e2))
+      output <- e.checkLoop(sigma)
     } yield {
-      val k4 = k1 + outputs.head.length - 1
-      ((k1, k4), LoopSet(e))
-    }).toList.groupBy(_._1)
-
-    w.map {
-      case (k, v) => loops.get(k) match {
-        case Some(xs) => (k, w(k) ++ xs.map {
-          case (_, ys) => ys
-        })
-        case None => (k, v)
-      }
+      println("!!!!")
+      val k4 = k1 + output.length - 1
+      w1((Atom(k1), Atom(k4))) = e :: w1((Atom(k1), Atom(k4)))
     }
+
+    w1.toMap
   }
+  */
 
   def genCPos(s: String, k: Int): List[PosExprSet] = List(
     CPosSet(k),
@@ -224,7 +220,7 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
             }).flatten)
       }
     }
-    matches(0)
+    (-1, emptyRegex) :: matches(0)
   }
 
   def genPos(s: String, k: Int): List[PosExprSet] = {
@@ -247,6 +243,7 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
     for {
       (k1, r1) <- rs1
       (k2, r2) <- rs2
+      if r1.nonEmpty || r2.nonEmpty // else, another CPos expression is equivalent
       ms = Pos(r1, r2, CInt(0)).evalAll(s)
       c = ms.indexOf(k)
       if c != -1
