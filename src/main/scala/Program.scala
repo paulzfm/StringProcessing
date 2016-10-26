@@ -58,7 +58,10 @@ object Program {
         case Nil => false
         case b :: bs => if (b.eval(sigma)) true else evalR(bs)
       }
-      evalR(conjunctions)
+      conjunctions match {
+        case Nil => true
+        case xs => evalR(xs)
+      }
     }
 
     def code(indent: Int = 0): String = {

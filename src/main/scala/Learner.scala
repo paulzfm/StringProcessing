@@ -19,12 +19,12 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
         (List(i), exprs)
     } toVector)
 
+    println(s"${partition.size} partitions")
+
     def exclude(k: Int): List[InputType] = (for {
       i <- partition.indices
       if i != k
     } yield partition(i)._1).flatten.toList
-
-    println(s"${partition.size} partitions")
 
     partition.size match {
       case 0 => new StringProgramSet
@@ -146,7 +146,7 @@ class Learner(val examples: List[(InputType, String)], val check: Boolean = fals
     val w = edges.map {
       case (i, j) =>
         ((i, j),
-          genConstStr(s.substring(i, j)) :: genSubStr(sigma, s.substring(i, j)))
+          genSubStr(sigma, s.substring(i, j)) :+ genConstStr(s.substring(i, j)))
     }.toMap
 
     new TraceExprSet((0 to s.length).map(Atom[Int]).toList, Atom(0), Atom(s.length),

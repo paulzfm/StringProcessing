@@ -112,8 +112,8 @@ object ProgramSet {
       } yield (Pair(x1, y1), Pair(x2, y2))
 
       val w1 = (for {
-        (x1, x2) <- edges
-        (y1, y2) <- that.edges
+        (x1, x2) <- w.keys
+        (y1, y2) <- that.w.keys
         es = for {
           f1 <- w(x1, x2)
           f2 <- that.w(y1, y2)
@@ -214,10 +214,52 @@ object ProgramSet {
       }
     }
 
-    lazy val allPrograms: Stream[TraceExpr] = w(startNode, terminateNode).toStream
-      .flatMap(_.allPrograms).map {
-      e => new TraceExpr(e)
+    lazy val allEdges: List[(Node, Node)] = w.keys.toList
+
+    lazy val allNodes: List[Node] = allEdges.flatMap {
+      case (x, y) => x :: y :: Nil
     }
+
+    lazy val succs: Map[Node, List[Node]] = (for {
+      x <- allNodes
+    } yield (x,
+      for {
+        (a, b) <- allEdges
+        if x == a
+      } yield b)).toMap
+
+    def pathsFrom(s: Node): Option[List[List[(Node, Node)]]] = {
+      if (s == terminateNode) Some(List(List()))
+      else succs.get(s) match {
+        case None => None
+        case Some(ss) => (for {
+          q <- ss
+          paths <- pathsFrom(q)
+        } yield paths.map((s, q) :: _)).flatten match {
+          case Nil => None
+          case xs => Some(xs)
+        }
+      }
+    }
+
+    lazy val allPaths: List[List[(Node, Node)]] = pathsFrom(startNode) match {
+      case Some(xs) => xs.sortBy(_.length)
+      case None => Nil
+    }
+
+    lazy val allPrograms: Stream[TraceExpr] = {
+      val xs = allPaths.toStream.flatMap {
+        path => permutation(path.map {
+          case (x, y) => w(x, y).flatMap(_.allPrograms).toStream
+        })
+      }
+      xs.map(new TraceExpr(_))
+    }
+
+//      w(startNode, terminateNode).toStream
+//      .flatMap(_.allPrograms).map {
+//      e => new TraceExpr(e)
+//    }
   }
 
   abstract class AtomExprSet extends ProgramSetNode[AtomExpr] {
