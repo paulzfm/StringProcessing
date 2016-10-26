@@ -1,7 +1,6 @@
 # String Processing
 
-This project is based on S. Gulwani's paper: http://msr-waypoint
-.com/en-us/um/people/sumitg/pubs/popl11-synthesis.pdf.
+This project is based on S. Gulwani's paper: [Automating String Processing in Spreadsheets Using Input-Output Examples](http://msr-waypoint.com/en-us/um/people/sumitg/pubs/popl11-synthesis.pdf).
 
 This is a standard `sbt` project.
 
